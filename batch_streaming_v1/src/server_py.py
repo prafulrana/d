@@ -22,6 +22,8 @@ BASE_UDP_PORT = int(os.environ.get('BASE_UDP_PORT', 5000))
 PUBLIC_HOST = os.environ.get('PUBLIC_HOST', '10.243.249.215')
 SAMPLE_URI = os.environ.get('SAMPLE_URI', 'file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4')
 USE_OSD = int(os.environ.get('USE_OSD', 1)) == 1
+# Toggle HW/SW encoder for debugging capacity
+USE_HW_ENC = int(os.environ.get('USE_HW_ENC', 1)) == 1
 # DeepStream REST default ports seen in samples
 REST_PORT = int(os.environ.get('REST_PORT', 9000))
 REST_PORTS = [str(REST_PORT), '9010', '9000']
@@ -120,14 +122,21 @@ def add_stream(index):
         raise RuntimeError(f'Failed to request demux pad src_{index}')
 
     # Per‑stream branch (post‑demux)
+    if USE_HW_ENC:
+        enc_part = 'nvv4l2h264enc insert-sps-pps=1 idrinterval=30 iframeinterval=30 bitrate=3000000'
+    else:
+        enc_part = 'x264enc tune=zerolatency speed-preset=ultrafast bitrate=3000 key-int-max=30'
+
+    osd_part = 'nvosdbin ! ' if USE_OSD else ''
+
     branch_desc = (
-        'queue leaky=2 max-size-time=200000000 ! '
+        'queue leaky=2 max-size-time=200000000 max-size-buffers=0 max-size-bytes=0 ! '
         'nvvideoconvert ! video/x-raw(memory:NVMM),format=RGBA ! '
-        + ('nvdsosd ! ' if USE_OSD else '') +
+        + osd_part +
         'nvvideoconvert ! video/x-raw(memory:NVMM),format=NV12,framerate=30/1 ! '
-        'nvv4l2h264enc insert-sps-pps=1 idrinterval=30 iframeinterval=30 bitrate=3000000 ! '
+        f'{enc_part} ! '
         'h264parse ! rtph264pay pt=96 config-interval=1 ! '
-        f'udpsink host=127.0.0.1 port={BASE_UDP_PORT + index} sync=false'
+        f'udpsink host=127.0.0.1 port={BASE_UDP_PORT + index} sync=false async=false'
     )
 
     branch_bin = Gst.parse_bin_from_description(branch_desc, True)
@@ -135,6 +144,21 @@ def add_stream(index):
     if src_pad.link(branch_bin.get_static_pad('sink')) != Gst.PadLinkReturn.OK:
         raise RuntimeError('Failed to link demux->branch')
     branch_bin.sync_state_with_parent()
+    # Ensure each child element syncs state with parent promptly
+    it = branch_bin.iterate_elements()
+    while True:
+        res, elem = it.next()
+        if res == Gst.IteratorResult.OK:
+            try:
+                elem.sync_state_with_parent()
+            except Exception:
+                pass
+        elif res == Gst.IteratorResult.DONE:
+            break
+        elif res == Gst.IteratorResult.RESYNC:
+            it = branch_bin.iterate_elements()
+        else:
+            break
 
     # Mount RTSP factory (UDP wrap)
     factory = GstRtspServer.RTSPMediaFactory.new()
@@ -144,6 +168,7 @@ def add_stream(index):
         'encoding-name=(string)H264, payload=(int)96" )'
     )
     factory.set_shared(True)
+    factory.set_latency(100)
     server.get_mount_points().add_factory(f'/s{index}', factory)
     print(f'Mounted RTSP at /s{index} (UDP port {BASE_UDP_PORT + index})')
 
