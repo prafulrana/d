@@ -139,7 +139,7 @@ def add_stream(index):
     # Mount RTSP factory (UDP wrap)
     factory = GstRtspServer.RTSPMediaFactory.new()
     factory.set_launch(
-        f'( udpsrc port={BASE_UDP_PORT + index} buffer-size=524288 '
+        f'( udpsrc name=pay0 port={BASE_UDP_PORT + index} buffer-size=524288 '
         'caps="application/x-rtp, media=(string)video, clock-rate=(int)90000, '
         'encoding-name=(string)H264, payload=(int)96" )'
     )
