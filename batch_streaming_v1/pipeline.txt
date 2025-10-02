@@ -1,1 +1,1 @@
-nvmultiurisrcbin max-batch-size=8 batched-push-timeout=100000 width=1280 height=720 file-loop=true sync-inputs=false attach-sys-ts=true drop-on-latency=false ! nvinfer config-file-path=/opt/nvidia/deepstream/deepstream-8.0/pgie.txt ! nvstreamdemux name=demux
+nvmultiurisrcbin port=9000 max-batch-size=8 batched-push-timeout=100000 width=1280 height=720 file-loop=true sync-inputs=false attach-sys-ts=true drop-on-latency=false ! nvinfer config-file-path=/opt/nvidia/deepstream/deepstream-8.0/pgie.txt ! nvstreamdemux name=demux
