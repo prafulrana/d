@@ -19,7 +19,7 @@ max_streams = 64
 # Env vars
 RTSP_PORT = int(os.environ.get('RTSP_PORT', 8554))
 BASE_UDP_PORT = int(os.environ.get('BASE_UDP_PORT', 5000))
-PUBLIC_HOST = os.environ.get('PUBLIC_HOST', '127.0.0.1')
+PUBLIC_HOST = os.environ.get('PUBLIC_HOST', '10.243.249.215')
 SAMPLE_URI = os.environ.get('SAMPLE_URI', 'file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4')
 USE_OSD = int(os.environ.get('USE_OSD', 1)) == 1
 # DeepStream REST default ports seen in samples

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 RTSP_PORT="${RTSP_PORT:-8554}"
-PUBLIC_HOST="${PUBLIC_HOST:-127.0.0.1}"
+PUBLIC_HOST="${PUBLIC_HOST:-10.243.249.215}"
 BASE_UDP_PORT="${BASE_UDP_PORT:-5000}"
 ENGINE_DIR="${ENGINE_DIR:-$PWD/models}"
 
@@ -20,4 +20,3 @@ docker run --rm \
   -e BASE_UDP_PORT="$BASE_UDP_PORT" \
   -v "$ENGINE_DIR":/models \
   batch_streaming_py:latest
-
