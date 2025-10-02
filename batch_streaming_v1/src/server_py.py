@@ -22,11 +22,9 @@ BASE_UDP_PORT = int(os.environ.get('BASE_UDP_PORT', 5000))
 PUBLIC_HOST = os.environ.get('PUBLIC_HOST', '10.243.249.215')
 SAMPLE_URI = os.environ.get('SAMPLE_URI', 'file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4')
 USE_OSD = int(os.environ.get('USE_OSD', 1)) == 1
-# Toggle HW/SW encoder for debugging capacity
-USE_HW_ENC = int(os.environ.get('USE_HW_ENC', 1)) == 1
-# DeepStream REST default ports seen in samples
+# Simplified happy path: hardware NVENC only
+# DeepStream REST (inside nvmultiurisrcbin)
 REST_PORT = int(os.environ.get('REST_PORT', 9000))
-REST_PORTS = [str(REST_PORT), '9010', '9000']
 CONTROL_PORT = int(os.environ.get('CONTROL_PORT', 8081))
 
 
@@ -98,21 +96,18 @@ def _post_add_source(index):
             'source': 'vst'
         }
     }
-    for port in REST_PORTS:
-        port = str(port).strip()
-        if not port:
-            continue
-        try:
-            url = f'http://127.0.0.1:{port}/api/v1/stream/add'
-            r = requests.post(url, json=payload, timeout=3)
-            if r.status_code == 200:
-                print(f'Added stream {index} via REST @ {port}')
-                return True
-            else:
-                print(f'REST add failed @ {port}: {r.status_code} {r.text}')
-        except Exception as e:
-            print(f'REST connect failed @ {port}: {e}')
-    return False
+    try:
+        url = f'http://127.0.0.1:{REST_PORT}/api/v1/stream/add'
+        r = requests.post(url, json=payload, timeout=5)
+        if r.status_code == 200:
+            print(f'Added stream {index} via REST @ {REST_PORT}')
+            return True
+        else:
+            print(f'REST add failed @ {REST_PORT}: {r.status_code} {r.text}')
+            return False
+    except Exception as e:
+        print(f'REST connect failed @ {REST_PORT}: {e}')
+        return False
 
 
 def add_stream(index):
@@ -122,18 +117,10 @@ def add_stream(index):
         raise RuntimeError(f'Failed to request demux pad src_{index}')
 
     # Per‑stream branch (post‑demux)
-    if USE_HW_ENC:
-        enc_part = 'nvv4l2h264enc insert-sps-pps=1 idrinterval=30 iframeinterval=30 bitrate=3000000'
-    else:
-        # Pick best available software encoder: x264enc → avenc_h264 → openh264enc
-        if Gst.ElementFactory.find('x264enc') is not None:
-            enc_part = 'x264enc tune=zerolatency speed-preset=ultrafast bitrate=3000 key-int-max=30'
-        elif Gst.ElementFactory.find('avenc_h264') is not None:
-            enc_part = 'avenc_h264 bitrate=3000000'
-        elif Gst.ElementFactory.find('openh264enc') is not None:
-            enc_part = 'openh264enc bitrate=3000000'
-        else:
-            raise RuntimeError('No software H264 encoder available (x264enc/avenc_h264/openh264enc)')
+    enc_part = (
+        'nvv4l2h264enc maxperf-enable=1 preset-level=1 '
+        'num-surface-bufs=16 insert-sps-pps=1 idrinterval=60 iframeinterval=60 bitrate=3000000'
+    )
 
     osd_part = 'nvosdbin ! ' if USE_OSD else ''
 
@@ -168,7 +155,15 @@ def add_stream(index):
         else:
             break
 
-    # Mount RTSP factory (UDP wrap)
+    # Add source via nvmultiurisrcbin REST API first
+    ok = _post_add_source(index)
+    if not ok:
+        raise RuntimeError('Failed to add source via REST (port %d)' % REST_PORT)
+
+    # Small stagger to avoid simultaneous encoder opens
+    GLib.usleep(200_000)  # 200ms
+
+    # Mount RTSP factory (UDP wrap) after source is added
     factory = GstRtspServer.RTSPMediaFactory.new()
     factory.set_launch(
         f'( udpsrc name=pay0 port={BASE_UDP_PORT + index} buffer-size=524288 '
@@ -179,9 +174,6 @@ def add_stream(index):
     factory.set_latency(100)
     server.get_mount_points().add_factory(f'/s{index}', factory)
     print(f'Mounted RTSP at /s{index} (UDP port {BASE_UDP_PORT + index})')
-
-    # Add source via nvmultiurisrcbin REST API (best effort)
-    _post_add_source(index)
 
 
 def setup_rtsp_server():
