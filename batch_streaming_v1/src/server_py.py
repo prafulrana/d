@@ -125,7 +125,15 @@ def add_stream(index):
     if USE_HW_ENC:
         enc_part = 'nvv4l2h264enc insert-sps-pps=1 idrinterval=30 iframeinterval=30 bitrate=3000000'
     else:
-        enc_part = 'x264enc tune=zerolatency speed-preset=ultrafast bitrate=3000 key-int-max=30'
+        # Pick best available software encoder: x264enc → avenc_h264 → openh264enc
+        if Gst.ElementFactory.find('x264enc') is not None:
+            enc_part = 'x264enc tune=zerolatency speed-preset=ultrafast bitrate=3000 key-int-max=30'
+        elif Gst.ElementFactory.find('avenc_h264') is not None:
+            enc_part = 'avenc_h264 bitrate=3000000'
+        elif Gst.ElementFactory.find('openh264enc') is not None:
+            enc_part = 'openh264enc bitrate=3000000'
+        else:
+            raise RuntimeError('No software H264 encoder available (x264enc/avenc_h264/openh264enc)')
 
     osd_part = 'nvosdbin ! ' if USE_OSD else ''
 

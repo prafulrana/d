@@ -7,6 +7,10 @@ RUN apt-get update && apt-get install -y \
     gir1.2-gst-plugins-base-1.0 \
     gir1.2-gstreamer-1.0 \
     python3-pip \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
+    libx264-164 \
     && rm -rf /var/lib/apt/lists/*
 
 # Prefer distro packages to avoid pip/Debian conflicts
