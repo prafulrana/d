@@ -1,4 +1,4 @@
-# Primary inference config for batch-64 traffic detection
+# Primary inference config for batch-8 traffic detection
 # Model: ResNet-18 TrafficCamNet (4 classes: Car, Person, RoadSign, TwoWheeler)
 [property]
 gpu-id=0
@@ -6,9 +6,9 @@ net-scale-factor=0.0039215697906911373
 offsets=0.0;0.0;0.0
 model-color-format=0
 onnx-file=/opt/nvidia/deepstream/deepstream/samples/models/Primary_Detector/resnet18_trafficcamnet_pruned.onnx
-model-engine-file=/models/trafficcamnet_b64_gpu0_fp16.engine
+model-engine-file=/models/trafficcamnet_b8_gpu0_fp16.engine
 labelfile-path=/opt/nvidia/deepstream/deepstream/samples/models/Primary_Detector/labels.txt
-batch-size=64
+batch-size=8
 network-mode=2
 num-detected-classes=4
 interval=0
