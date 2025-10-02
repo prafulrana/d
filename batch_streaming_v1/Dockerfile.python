@@ -9,7 +9,11 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir flask requests
+# Prefer distro packages to avoid pip/Debian conflicts
+RUN apt-get update && apt-get install -y \
+    python3-requests \
+    python3-flask \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/nvidia/deepstream/deepstream-8.0
 
@@ -20,4 +24,3 @@ COPY src/server_py.py /opt/nvidia/deepstream/deepstream-8.0/server_py.py
 ENV PYTHONUNBUFFERED=1
 
 CMD ["python3", "/opt/nvidia/deepstream/deepstream-8.0/server_py.py"]
-

@@ -23,7 +23,8 @@ PUBLIC_HOST = os.environ.get('PUBLIC_HOST', '127.0.0.1')
 SAMPLE_URI = os.environ.get('SAMPLE_URI', 'file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4')
 USE_OSD = int(os.environ.get('USE_OSD', 1)) == 1
 # DeepStream REST default ports seen in samples
-REST_PORTS = [os.environ.get('REST_PORT', ''), '9010', '9000']
+REST_PORT = int(os.environ.get('REST_PORT', 9000))
+REST_PORTS = [str(REST_PORT), '9010', '9000']
 
 
 def bus_call(bus, message, loop):
@@ -46,8 +47,9 @@ def create_pipeline():
     # nvmultiurisrcbin (dynamic sources, start empty)
     multiuri = Gst.ElementFactory.make('nvmultiurisrcbin', 'multiuri')
     multiuri.set_property('max-batch-size', max_streams)
-    # Start with no sources
+    # Start with no sources and enable internal REST API on REST_PORT
     multiuri.set_property('uri-list', '')
+    multiuri.set_property('port', REST_PORT)
     multiuri.set_property('width', 1280)
     multiuri.set_property('height', 720)
     multiuri.set_property('batched-push-timeout', 100000)
