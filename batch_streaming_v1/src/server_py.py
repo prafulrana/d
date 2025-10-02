@@ -25,6 +25,7 @@ USE_OSD = int(os.environ.get('USE_OSD', 1)) == 1
 # DeepStream REST default ports seen in samples
 REST_PORT = int(os.environ.get('REST_PORT', 9000))
 REST_PORTS = [str(REST_PORT), '9010', '9000']
+CONTROL_PORT = int(os.environ.get('CONTROL_PORT', 8081))
 
 
 def bus_call(bus, message, loop):
@@ -194,8 +195,9 @@ if __name__ == '__main__':
     pipeline.set_state(Gst.State.PLAYING)
     print('Pipeline started')
 
-    # Run Flask API on port 8080
-    flask_thread = Thread(target=app.run, kwargs={'host': '0.0.0.0', 'port': 8080, 'debug': False, 'use_reloader': False})
+    print(f'Control API will listen on port {CONTROL_PORT}')
+    # Run Flask API on configurable control port (default 8081)
+    flask_thread = Thread(target=app.run, kwargs={'host': '0.0.0.0', 'port': CONTROL_PORT, 'debug': False, 'use_reloader': False})
     flask_thread.daemon = True
     flask_thread.start()
 
