@@ -1,0 +1,23 @@
+FROM nvcr.io/nvidia/deepstream:8.0-triton-multiarch
+
+# System deps for Python GObject + Flask
+RUN apt-get update && apt-get install -y \
+    python3-gi \
+    python3-gi-cairo \
+    gir1.2-gst-plugins-base-1.0 \
+    gir1.2-gstreamer-1.0 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir flask requests
+
+WORKDIR /opt/nvidia/deepstream/deepstream-8.0
+
+# Copy configs and app
+COPY pgie.txt /opt/nvidia/deepstream/deepstream-8.0/pgie.txt
+COPY src/server_py.py /opt/nvidia/deepstream/deepstream-8.0/server_py.py
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python3", "/opt/nvidia/deepstream/deepstream-8.0/server_py.py"]
+
