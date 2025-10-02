@@ -33,12 +33,12 @@ CONTROL_PORT = int(os.environ.get('CONTROL_PORT', 8081))
 def bus_call(bus, message, loop):
     msg_type = message.type
     if msg_type == Gst.MessageType.EOS:
-        print('End of stream')
-        loop.quit()
+        # Do not stop the whole service; just log
+        print('EOS received')
     elif msg_type == Gst.MessageType.ERROR:
         err, debug = message.parse_error()
-        print(f'Error: {err.message}, Debug: {debug}')
-        loop.quit()
+        print(f'GStreamer ERROR: {err.message}\nDebug: {debug}')
+        # Keep running; individual source errors shouldn’t kill the server
     return True
 
 
