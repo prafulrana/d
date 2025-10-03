@@ -68,10 +68,41 @@ static int create_ctrl_listener(void) {
   return s;
 }
 
+static const char* find_query_param(const char *req, const char *key) {
+  // Very small helper: look for "?key=" or "&key=" and return pointer to value (not decoded)
+  const char *q = strchr(req, ' '); // after method
+  if (!q) return NULL;
+  const char *path = q + 1; // begins with '/'
+  const char *qm = strchr(path, '?');
+  if (!qm) return NULL;
+  const char *p = qm + 1;
+  size_t klen = strlen(key);
+  while (*p && *p != ' ') {
+    if ((p[0] == '&' && strncmp(p+1, key, klen) == 0 && p[1+klen] == '=') ||
+        (p == qm + 1 && strncmp(p, key, klen) == 0 && p[klen] == '=')) {
+      const char *val = p + ((p[0] == '&') ? 2 + klen : 1 + klen);
+      return val; // caller should copy until '&' or space
+    }
+    const char *amp = strchr(p, '&');
+    const char *sp = strchr(p, ' ');
+    if (!amp || (sp && sp < amp)) break;
+    p = amp;
+  }
+  return NULL;
+}
+
+static void send_json(int c, const char *json) {
+  gchar *hdr = g_strdup_printf("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n", strlen(json));
+  send(c, hdr, strlen(hdr), 0); send(c, json, strlen(json), 0);
+  g_free(hdr);
+}
+
 static void handle_request(int c, const char *buf) {
   gboolean is_add = (g_str_has_prefix(buf, "GET /add_demo_stream ") || g_str_has_prefix(buf, "GET /add_demo_stream?"));
+  gboolean is_req = (g_str_has_prefix(buf, "GET /requestStream ") || g_str_has_prefix(buf, "GET /requestStream?"));
   gboolean is_status = (g_str_has_prefix(buf, "GET /status ") || g_str_has_prefix(buf, "GET /status?"));
   if (!is_add && !is_status) {
+    if (is_req) goto ADD_LIKE; // handle below
     const char *resp = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\nConnection: close\r\n\r\nNot Found";
     send(c, resp, strlen(resp), 0);
     return;
@@ -95,7 +126,8 @@ static void handle_request(int c, const char *buf) {
     return;
   }
 
-  // Add stream
+ADD_LIKE:
+  // Add stream (supports /add_demo_stream and /requestStream?url=...)
   guint index;
   g_mutex_lock(&g_state_lock);
   if (g_next_index >= g_max_streams) {
@@ -112,17 +144,33 @@ static void handle_request(int c, const char *buf) {
   gchar *path = NULL; gchar *url = NULL;
   gboolean ok = add_branch_and_mount(index, &path, &url);
   if (ok) {
+    // Resolve source URI: ?url=...
     const gchar *env_sample = g_getenv("SAMPLE_URI");
     const gchar *sample_uri = env_sample ? env_sample : "file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4";
+    const char *v = find_query_param(buf, "url");
+    gchar *src_uri = NULL;
+    if (v) {
+      // copy until & or space
+      const char *end = v; while (*end && *end!=' '& *end!='\r' && *end!='\n' && *end!='&') end++;
+      src_uri = g_strndup(v, (gsize)(end - v));
+    }
+    if (!src_uri) src_uri = g_strdup(sample_uri);
     gchar *body = g_strdup_printf(
       "{\n  \"key\": \"sensor\",\n  \"value\": {\n    \"camera_id\": \"api_%u\",\n    \"camera_url\": \"%s\",\n    \"change\": \"camera_add\"\n  },\n  \"headers\": { \"source\": \"app\" }\n}\n",
-      index, sample_uri);
+      index, src_uri);
     (void)http_post_localhost_try("/api/v1/stream/add", body, strlen(body));
     g_free(body);
-    gchar *json = g_strdup_printf("{\n  \"path\": \"%s\",\n  \"url\": \"%s\"\n}\n", path, url);
-    gchar *hdr = g_strdup_printf("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n", strlen(json));
-    send(c, hdr, strlen(hdr), 0); send(c, json, strlen(json), 0);
-    g_free(hdr); g_free(json);
+    gchar *json = g_strdup_printf(
+      "{\n  \"streamId\": %u,\n  \"ingest\": \"%s\",\n  \"rtspUrl\": \"%s\",\n  \"path\": \"%s\",\n  \"udp\": %u,\n  \"encoder\": \"%s\"\n}\n",
+      index,
+      src_uri,
+      url,
+      path,
+      g_streams[index].udp_port,
+      g_streams[index].enc_kind[0] ? g_streams[index].enc_kind : "unknown");
+    send_json(c, json);
+    g_free(json);
+    g_free(src_uri);
   } else {
     const char *resp = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: 6\r\nConnection: close\r\n\r\nError\n";
     send(c, resp, strlen(resp), 0);
@@ -145,4 +193,3 @@ gpointer control_http_thread(gpointer data) {
   }
   return NULL;
 }
-
