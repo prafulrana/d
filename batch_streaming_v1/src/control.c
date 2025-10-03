@@ -97,13 +97,56 @@ static void send_json(int c, const char *json) {
   g_free(hdr);
 }
 
+static ssize_t read_more_body(int c, char *first_buf, ssize_t first_len, char **out_body, size_t *out_len) {
+  // Parse Content-Length and collect the full body into a newly allocated buffer.
+  const char *cl = strcasestr(first_buf, "Content-Length:");
+  const char *hdr_end = strstr(first_buf, "\r\n\r\n");
+  if (!hdr_end) hdr_end = strstr(first_buf, "\n\n");
+  size_t want = 0;
+  if (cl) {
+    want = (size_t) strtoul(cl + strlen("Content-Length:"), NULL, 10);
+  }
+  if (!hdr_end || want == 0) { *out_body = NULL; *out_len = 0; return first_len; }
+  const char *b0 = hdr_end + ((hdr_end[1] == '\r') ? 4 : 2);
+  size_t have = (size_t)(first_len - (b0 - first_buf));
+  if (have >= want) {
+    *out_body = g_strndup(b0, want);
+    *out_len = want; return first_len;
+  }
+  char *body = g_malloc0(want + 1);
+  memcpy(body, b0, have);
+  size_t need = want - have;
+  while (need > 0) {
+    ssize_t n = recv(c, body + (want - need), need, 0);
+    if (n <= 0) break;
+    need -= (size_t)n;
+  }
+  *out_body = body; *out_len = want - need;
+  return first_len;
+}
+
+static gchar* extract_url_from_json(const char *body, size_t len) {
+  if (!body || len == 0) return NULL;
+  const char *k = "\"url\"";
+  const char *p = body;
+  while ((p = strstr(p, k)) != NULL) {
+    const char *q = strchr(p + strlen(k), '"');
+    if (!q) { p += strlen(k); continue; }
+    // find next quote after colon
+    const char *colon = strchr(p + strlen(k), ':'); if (!colon) { p += strlen(k); continue; }
+    const char *quote = strchr(colon, '"'); if (!quote) { p += strlen(k); continue; }
+    const char *end = quote + 1; while (end < body + len && *end != '"') end++;
+    if (end >= body + len) break;
+    return g_strndup(quote + 1, (gsize)(end - (quote + 1)));
+  }
+  return NULL;
+}
+
 static void handle_request(int c, const char *buf) {
-  gboolean is_add = (g_str_has_prefix(buf, "GET /add_demo_stream ") || g_str_has_prefix(buf, "GET /add_demo_stream?"));
-  gboolean is_req = (g_str_has_prefix(buf, "GET /requestStream ") || g_str_has_prefix(buf, "GET /requestStream?"));
-  gboolean is_addstream = (g_str_has_prefix(buf, "GET /addStream ") || g_str_has_prefix(buf, "GET /addStream?"));
-  gboolean is_status = (g_str_has_prefix(buf, "GET /status ") || g_str_has_prefix(buf, "GET /status?"));
-  if (!is_add && !is_status) {
-    if (is_req || is_addstream) goto ADD_LIKE; // handle below
+  gboolean is_get_req = (g_str_has_prefix(buf, "GET /requestStream ") || g_str_has_prefix(buf, "GET /requestStream?"));
+  gboolean is_post_req = g_str_has_prefix(buf, "POST /requestStream ");
+  gboolean is_status = (g_str_has_prefix(buf, "GET /streams ") || g_str_has_prefix(buf, "GET /streams?") || g_str_has_prefix(buf, "GET /status "));
+  if (!is_get_req && !is_post_req && !is_status) {
     const char *resp = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\nConnection: close\r\n\r\nNot Found";
     send(c, resp, strlen(resp), 0);
     return;
@@ -127,8 +170,7 @@ static void handle_request(int c, const char *buf) {
     return;
   }
 
-ADD_LIKE:
-  // Add stream (supports /add_demo_stream, /requestStream?url=..., /addStream?name=...)
+  // Add stream (POST /requestStream with JSON body {"url":...} or GET /requestStream?url=...)
   guint index;
   g_mutex_lock(&g_state_lock);
   if (g_next_index >= g_max_streams) {
@@ -145,58 +187,36 @@ ADD_LIKE:
   gchar *path = NULL; gchar *url = NULL;
   gboolean ok = add_branch_and_mount(index, &path, &url);
   if (ok) {
-    // Resolve source URI: ?url=...
-    const gchar *env_sample = g_getenv("SAMPLE_URI");
-    const gchar *sample_uri = env_sample ? env_sample : "file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4";
-    const char *v = find_query_param(buf, "url");
-    const char *namep = find_query_param(buf, "name");
+    // Resolve source URI from POST body or GET ?url=...
     gchar *src_uri = NULL;
-    if (is_addstream && namep) {
-      // Build MediaMTX RTSP URL from name
-      const gchar *h = g_getenv("MTX_HOST"); if (!h || !*h) h = "127.0.0.1";
-      const gchar *p = g_getenv("MTX_RTSP_PORT"); if (!p || !*p) p = "8554";
-      const char *end = namep; while (*end && *end!=' '& *end!='\r' && *end!='\n' && *end!='&') end++;
-      gchar *name = g_strndup(namep, (gsize)(end - namep));
-      src_uri = g_strdup_printf("rtsp://%s:%s/%s", h, p, name);
-      g_free(name);
-    } else if (v) {
-      // copy until & or space
-      const char *end = v; while (*end && *end!=' '& *end!='\r' && *end!='\n' && *end!='&') end++;
-      src_uri = g_strndup(v, (gsize)(end - v));
+    if (is_post_req) {
+      char *body = NULL; size_t blen = 0; (void)read_more_body(c, (char*)buf, strlen(buf), &body, &blen);
+      src_uri = extract_url_from_json(body ? body : "", blen);
+      if (body) g_free(body);
     }
-    if (!src_uri) src_uri = g_strdup(sample_uri);
+    if (!src_uri) {
+      const char *v = find_query_param(buf, "url");
+      if (v) { const char *end = v; while (*end && *end!=' '& *end!='\r' && *end!='\n' && *end!='&') end++; src_uri = g_strndup(v, (gsize)(end - v)); }
+    }
+    if (!src_uri) { // final fallback
+      const gchar *env_sample = g_getenv("SAMPLE_URI");
+      src_uri = g_strdup(env_sample ? env_sample : "file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4");
+    }
     gchar *body = g_strdup_printf(
       "{\n  \"key\": \"sensor\",\n  \"value\": {\n    \"camera_id\": \"api_%u\",\n    \"camera_url\": \"%s\",\n    \"change\": \"camera_add\"\n  },\n  \"headers\": { \"source\": \"app\" }\n}\n",
       index, src_uri);
     (void)http_post_localhost_try("/api/v1/stream/add", body, strlen(body));
     g_free(body);
-    if (is_addstream && src_uri) {
-      const gchar *h = g_getenv("MTX_HOST"); if (!h || !*h) h = "127.0.0.1";
-      const gchar *p = g_getenv("MTX_RTSP_PORT"); if (!p || !*p) p = "8554";
-      // For RTSP, publish/read share same URL. Return both for clarity.
-      gchar *json = g_strdup_printf(
-        "{\n  \"streamId\": %u,\n  \"ingestPublish\": \"rtsp://%s:%s/%u\",\n  \"ingestRead\": \"%s\",\n  \"rtspUrl\": \"%s\",\n  \"path\": \"%s\",\n  \"udp\": %u,\n  \"encoder\": \"%s\"\n}\n",
-        index,
-        h, p, index,
-        src_uri,
-        url,
-        path,
-        g_streams[index].udp_port,
-        g_streams[index].enc_kind[0] ? g_streams[index].enc_kind : "unknown");
-      send_json(c, json);
-      g_free(json);
-    } else {
-      gchar *json = g_strdup_printf(
-        "{\n  \"streamId\": %u,\n  \"ingest\": \"%s\",\n  \"rtspUrl\": \"%s\",\n  \"path\": \"%s\",\n  \"udp\": %u,\n  \"encoder\": \"%s\"\n}\n",
-        index,
-        src_uri ? src_uri : sample_uri,
-        url,
-        path,
-        g_streams[index].udp_port,
-        g_streams[index].enc_kind[0] ? g_streams[index].enc_kind : "unknown");
-      send_json(c, json);
-      g_free(json);
-    }
+    gchar *json = g_strdup_printf(
+      "{\n  \"streamId\": %u,\n  \"ingest\": \"%s\",\n  \"rtspUrl\": \"%s\",\n  \"path\": \"%s\",\n  \"udp\": %u,\n  \"encoder\": \"%s\"\n}\n",
+      index,
+      src_uri,
+      url,
+      path,
+      g_streams[index].udp_port,
+      g_streams[index].enc_kind[0] ? g_streams[index].enc_kind : "unknown");
+    send_json(c, json);
+    g_free(json);
     g_free(src_uri);
   } else {
     const char *resp = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: 6\r\nConnection: close\r\n\r\nError\n";
