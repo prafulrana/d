@@ -100,9 +100,10 @@ static void send_json(int c, const char *json) {
 static void handle_request(int c, const char *buf) {
   gboolean is_add = (g_str_has_prefix(buf, "GET /add_demo_stream ") || g_str_has_prefix(buf, "GET /add_demo_stream?"));
   gboolean is_req = (g_str_has_prefix(buf, "GET /requestStream ") || g_str_has_prefix(buf, "GET /requestStream?"));
+  gboolean is_addstream = (g_str_has_prefix(buf, "GET /addStream ") || g_str_has_prefix(buf, "GET /addStream?"));
   gboolean is_status = (g_str_has_prefix(buf, "GET /status ") || g_str_has_prefix(buf, "GET /status?"));
   if (!is_add && !is_status) {
-    if (is_req) goto ADD_LIKE; // handle below
+    if (is_req || is_addstream) goto ADD_LIKE; // handle below
     const char *resp = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 9\r\nConnection: close\r\n\r\nNot Found";
     send(c, resp, strlen(resp), 0);
     return;
@@ -127,7 +128,7 @@ static void handle_request(int c, const char *buf) {
   }
 
 ADD_LIKE:
-  // Add stream (supports /add_demo_stream and /requestStream?url=...)
+  // Add stream (supports /add_demo_stream, /requestStream?url=..., /addStream?name=...)
   guint index;
   g_mutex_lock(&g_state_lock);
   if (g_next_index >= g_max_streams) {
@@ -148,8 +149,17 @@ ADD_LIKE:
     const gchar *env_sample = g_getenv("SAMPLE_URI");
     const gchar *sample_uri = env_sample ? env_sample : "file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4";
     const char *v = find_query_param(buf, "url");
+    const char *namep = find_query_param(buf, "name");
     gchar *src_uri = NULL;
-    if (v) {
+    if (is_addstream && namep) {
+      // Build MediaMTX RTSP URL from name
+      const gchar *h = g_getenv("MTX_HOST"); if (!h || !*h) h = "127.0.0.1";
+      const gchar *p = g_getenv("MTX_RTSP_PORT"); if (!p || !*p) p = "8554";
+      const char *end = namep; while (*end && *end!=' '& *end!='\r' && *end!='\n' && *end!='&') end++;
+      gchar *name = g_strndup(namep, (gsize)(end - namep));
+      src_uri = g_strdup_printf("rtsp://%s:%s/%s", h, p, name);
+      g_free(name);
+    } else if (v) {
       // copy until & or space
       const char *end = v; while (*end && *end!=' '& *end!='\r' && *end!='\n' && *end!='&') end++;
       src_uri = g_strndup(v, (gsize)(end - v));
@@ -160,16 +170,33 @@ ADD_LIKE:
       index, src_uri);
     (void)http_post_localhost_try("/api/v1/stream/add", body, strlen(body));
     g_free(body);
-    gchar *json = g_strdup_printf(
-      "{\n  \"streamId\": %u,\n  \"ingest\": \"%s\",\n  \"rtspUrl\": \"%s\",\n  \"path\": \"%s\",\n  \"udp\": %u,\n  \"encoder\": \"%s\"\n}\n",
-      index,
-      src_uri,
-      url,
-      path,
-      g_streams[index].udp_port,
-      g_streams[index].enc_kind[0] ? g_streams[index].enc_kind : "unknown");
-    send_json(c, json);
-    g_free(json);
+    if (is_addstream && src_uri) {
+      const gchar *h = g_getenv("MTX_HOST"); if (!h || !*h) h = "127.0.0.1";
+      const gchar *p = g_getenv("MTX_RTSP_PORT"); if (!p || !*p) p = "8554";
+      // For RTSP, publish/read share same URL. Return both for clarity.
+      gchar *json = g_strdup_printf(
+        "{\n  \"streamId\": %u,\n  \"ingestPublish\": \"rtsp://%s:%s/%u\",\n  \"ingestRead\": \"%s\",\n  \"rtspUrl\": \"%s\",\n  \"path\": \"%s\",\n  \"udp\": %u,\n  \"encoder\": \"%s\"\n}\n",
+        index,
+        h, p, index,
+        src_uri,
+        url,
+        path,
+        g_streams[index].udp_port,
+        g_streams[index].enc_kind[0] ? g_streams[index].enc_kind : "unknown");
+      send_json(c, json);
+      g_free(json);
+    } else {
+      gchar *json = g_strdup_printf(
+        "{\n  \"streamId\": %u,\n  \"ingest\": \"%s\",\n  \"rtspUrl\": \"%s\",\n  \"path\": \"%s\",\n  \"udp\": %u,\n  \"encoder\": \"%s\"\n}\n",
+        index,
+        src_uri ? src_uri : sample_uri,
+        url,
+        path,
+        g_streams[index].udp_port,
+        g_streams[index].enc_kind[0] ? g_streams[index].enc_kind : "unknown");
+      send_json(c, json);
+      g_free(json);
+    }
     g_free(src_uri);
   } else {
     const char *resp = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: 6\r\nConnection: close\r\n\r\nError\n";
