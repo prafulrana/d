@@ -1,6 +1,6 @@
 # Control API v1
 
-A tiny, opinionated HTTP API to request and delete per‑stream outputs. Simple contract: clients request a stream and get back a `streamId` and `rtspUrl`. Clients delete by `streamId`. Idle streams are auto‑cleaned.
+A tiny, opinionated HTTP API to request per‑stream outputs. Simple contract: your orchestrator gives us an RTSP URL to pull; we return a `streamId` and an output `rtspUrl` you can hand to your viewers.
 
 ## Base
 - URL: `http://<HOST>:<CTRL_PORT>` (default `:8080`)
@@ -19,19 +19,19 @@ A tiny, opinionated HTTP API to request and delete per‑stream outputs. Simple 
 - Pacing: sources flagged live and sinks use the clock; outputs are realtime paced (no > 30 fps bursts)
 - Inference: runs every frame (PGIE `interval=0`)
 
-## Endpoints
+## Endpoints (v1)
 
 ### POST `/requestStream`
-Request a new output stream.
+Request a new output stream by providing an RTSP URL to pull.
 
 - Request body
-  - `url` (optional string): upstream source URI. If omitted, uses `SAMPLE_URI`
-  - `label` (optional string): user label for this stream
+  - `url` (required string): upstream RTSP URL to pull (from your MediaMTX)
 
 - Response 200
 ```
 {
   "streamId": 7,
+  "ingest": "rtsp://mtx.example:8554/cam1",
   "rtspUrl": "rtsp://<PUBLIC_HOST>:<RTSP_PORT>/s7",
   "path": "/s7",
   "udp": 5007,
@@ -40,7 +40,7 @@ Request a new output stream.
 ```
 
 - Errors
-  - 400 `{ "error": "invalid_param", "message": "..." }`
+  - 400 `{ "error": "invalid_param" }` (missing/invalid url)
   - 429 `{ "error": "capacity_exceeded", "max": <int>, "hw_max": <int>, "sw_max": <int> }`
   - 500 `{ "error": "internal_error" }`
 
@@ -52,29 +52,8 @@ Request a new output stream.
 ```
 curl -sS -X POST \
   -H 'Content-Type: application/json' \
-  -d '{"url":"file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_1080p_h264.mp4"}' \
+  -d '{"url":"rtsp://mtx.example:8554/cam1"}' \
   http://localhost:8080/requestStream
-```
-
-### DELETE `/deleteStream/:id`
-Hard delete a stream and free all resources.
-
-- Response 200
-```
-{ "deleted": 7 }
-```
-
-- Errors
-  - 404 `{ "error": "not_found" }`
-  - 409 `{ "error": "conflict" }` (if deletion collides with an in‑flight allocation)
-  - 500 `{ "error": "internal_error" }`
-
-- Notes
-  - Unmounts RTSP path, releases demux pad, sets elements to NULL, removes from the bin, and clears metadata
-
-- Example
-```
-curl -sS -X DELETE http://localhost:8080/deleteStream/7
 ```
 
 ### GET `/streams`
@@ -86,7 +65,6 @@ List capacity and current streams.
   "max": 64,
   "hw_max": 8,
   "sw_max": 56,
-  "idle_ttl_sec": 60,
   "streams": [
     {
       "id": 0,
@@ -94,25 +72,15 @@ List capacity and current streams.
       "rtspUrl": "rtsp://<PUBLIC_HOST>:<RTSP_PORT>/s0",
       "udp": 5000,
       "encoder": "nvenc",
-      "label": "optional",
-      "viewers": 1,
-      "state": "ready",
-      "lastActive": "2025-10-03T09:55:21Z"
+      "state": "ready"
     }
   ]
 }
 ```
 
-## Idle Cleanup
-- Env `IDLE_TTL_SECS` (default 60). A janitor task deletes idle streams:
-  - If `viewers == 0` and `now - lastActive > IDLE_TTL_SECS` → perform the same cleanup as DELETE
-- Viewer count and `lastActive` are updated from RTSP session prepare/unprepare callbacks
-
 ## Status Codes
 - 200 OK — success
 - 400 Bad Request — invalid or missing params
-- 404 Not Found — stream id does not exist
-- 409 Conflict — concurrent mutation on same id
 - 429 Too Many Requests — capacity exhausted (HW or total)
 - 500 Internal Server Error — unexpected failure
 
@@ -138,4 +106,3 @@ List capacity and current streams.
 - DeepStream 8.0; pre‑demux is built in code: `nvmultiurisrcbin (live-source=1, batched-push-timeout≈33ms) → nvinfer(pgie.txt) → nvstreamdemux`
 - RTSP wrapping pattern: `udpsrc (H264 RTP caps) → rtph264depay → rtph264pay name=pay0`
 - Security: binds to 0.0.0.0; no auth. Use firewalling or run on trusted networks
-
