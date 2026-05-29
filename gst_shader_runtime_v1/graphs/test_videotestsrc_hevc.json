@@ -1,0 +1,140 @@
+{
+  "$schema": "./d-pipeline.schema.json",
+  "sourceUri": "file:///opt/nvidia/deepstream/deepstream/samples/streams/sample_720p.h264",
+  "isLive": true,
+  "clockPolicy": {
+    "kind": "diagnostic",
+    "videoClockMode": "source-pts",
+    "audioPacingMode": "source-pts",
+    "maxAudioLeadMs": 0,
+    "maxAvDeltaMs": 250
+  },
+  "outputWidth": 3840,
+  "outputHeight": 2160,
+  "outputFps": 60,
+  "bitrateBps": 8000000,
+  "maxBitrateBps": 10000000,
+  "sinkUri": "unix:/run/99ks/99sk.ts.sock",
+  "dPipeline": {
+    "version": 1,
+    "name": "diagnostic-maxine-720-to-2160",
+    "executor": "d-native-live-single-stage",
+    "clockPolicy": {
+      "kind": "diagnostic",
+      "videoClockMode": "source-pts",
+      "audioPacingMode": "source-pts",
+      "maxAudioLeadMs": 0,
+      "maxAvDeltaMs": 250
+    },
+    "encoderPolicy": {
+      "codec": "hevc",
+      "profile": "main",
+      "pixelFormat": "nv12",
+      "audioCodec": "aac",
+      "width": 3840,
+      "height": 2160,
+      "fps": 60,
+      "bitrateBps": 8000000,
+      "maxBitrateBps": 10000000
+    },
+    "devicePolicy": {
+      "residency": "gpu-only",
+      "cpuFallback": "forbidden",
+      "hostCopies": "encoded-packets-only"
+    },
+    "caps": {
+      "input": {
+        "format": "rgba8",
+        "res": "720",
+        "width": 1280,
+        "height": 720,
+        "fps": 60,
+        "frames": 1,
+        "device": "gpu"
+      },
+      "output": {
+        "format": "rgba8",
+        "res": "2160",
+        "width": 3840,
+        "height": 2160,
+        "fps": 60,
+        "frames": 1,
+        "device": "gpu"
+      },
+      "residency": "gpu-only",
+      "hostCopies": "encoded-packets-only"
+    },
+    "timing": {
+      "clockPolicy": {
+        "kind": "diagnostic",
+        "videoClockMode": "source-pts",
+        "audioPacingMode": "source-pts",
+        "maxAudioLeadMs": 0,
+        "maxAvDeltaMs": 250
+      },
+      "outputClockOwner": "maxine_720_to_2160",
+      "stageCount": 1
+    },
+    "filters": [],
+    "stages": [
+      {
+        "id": "maxine_720_to_2160",
+        "label": "Maxine 720p -> 2160p",
+        "kind": "model",
+        "engine": "nvidia-vfx",
+        "op": "scale+infer",
+        "device": "gpu",
+        "input": {
+          "format": "rgba8",
+          "res": "720",
+          "width": 1280,
+          "height": 720,
+          "fps": 60,
+          "frames": 1
+        },
+        "output": {
+          "format": "rgba8",
+          "res": "2160",
+          "width": 3840,
+          "height": 2160,
+          "fps": 60,
+          "frames": 1
+        },
+        "model": {
+          "family": "maxine",
+          "name": "maxine",
+          "inferFps": 60
+        },
+        "timing": {
+          "role": "output-clock-owner",
+          "clock": "program",
+          "pts": "stage-output",
+          "fps": 60,
+          "inputFps": 60,
+          "inferFps": 60,
+          "outputFps": 60,
+          "cadenceOwner": "output-clock-owner",
+          "ptsPolicy": "stage-output",
+          "frameHoldPolicy": "program-clock"
+        },
+        "techniques": []
+      }
+    ],
+    "links": [],
+    "linkPlan": {
+      "ok": true,
+      "linkCount": 0,
+      "links": [],
+      "errors": [],
+      "warnings": []
+    }
+  },
+  "stages": [
+    {
+      "id": "sample_shader",
+      "kind": "cuda",
+      "plugin": "d-native-video"
+    }
+  ],
+  "audioStages": []
+}

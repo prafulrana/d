@@ -1,0 +1,751 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://d.local/schemas/d-pipeline.schema.json",
+  "title": "d pipeline graph",
+  "x-generatedBy": "scripts/generate-d-pipeline-contract.mjs",
+  "x-source": "99KS/src/pipeline/d-pipeline-contract.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sourceUri",
+    "clockPolicy",
+    "outputWidth",
+    "outputHeight",
+    "outputFps",
+    "outputQueueMs",
+    "sinkUri",
+    "stages",
+    "dPipeline"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "runtimeName": {
+      "type": "string",
+      "default": "d-main"
+    },
+    "programName": {
+      "type": "string",
+      "default": "default"
+    },
+    "runtimeParams": {
+      "type": "object",
+      "default": {},
+      "additionalProperties": true
+    },
+    "sourceUri": {
+      "type": "string",
+      "default": ""
+    },
+    "sourceHeaders": {
+      "type": "string",
+      "default": ""
+    },
+    "clockPolicy": {
+      "$ref": "#/$defs/clockPolicy"
+    },
+    "isLive": {
+      "type": "boolean",
+      "default": true
+    },
+    "outputWidth": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 3840
+    },
+    "outputHeight": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 2160
+    },
+    "outputFps": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 120,
+      "default": 60
+    },
+    "dPipeline": {
+      "$ref": "#/$defs/dPipeline"
+    },
+    "processingWidth": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1280
+    },
+    "processingHeight": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 720
+    },
+    "bitrateBps": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 8000000
+    },
+    "maxBitrateBps": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 10000000
+    },
+    "outputQueueMs": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 3000
+    },
+    "perfRingPath": {
+      "type": "string",
+      "default": ""
+    },
+    "executionMode": {
+      "type": "string",
+      "default": "live",
+      "enum": [
+        "live",
+        "file"
+      ]
+    },
+    "outputUri": {
+      "type": "string",
+      "default": ""
+    },
+    "sinkUri": {
+      "type": "string",
+      "default": "unix:/run/99ks/99sk.ts.sock"
+    },
+    "stages": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/stage"
+      }
+    },
+    "audioStages": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/stage"
+      }
+    }
+  },
+  "$defs": {
+    "stage": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "kind",
+        "plugin"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "dims": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/dims"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "in",
+                "out"
+              ],
+              "properties": {
+                "in": {
+                  "$ref": "#/$defs/dims"
+                },
+                "out": {
+                  "$ref": "#/$defs/dims"
+                }
+              }
+            }
+          ]
+        },
+        "params": {
+          "type": "object"
+        }
+      }
+    },
+    "dims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "w",
+        "h"
+      ],
+      "properties": {
+        "w": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "h": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "dPipeline": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "version",
+        "clockPolicy",
+        "encoderPolicy",
+        "devicePolicy",
+        "caps",
+        "timing",
+        "filters",
+        "units",
+        "stages",
+        "links",
+        "linkPlan"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "executor": {
+          "type": "string"
+        },
+        "clockPolicy": {
+          "$ref": "#/$defs/clockPolicy"
+        },
+        "encoderPolicy": {
+          "$ref": "#/$defs/encoderPolicy"
+        },
+        "devicePolicy": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "residency",
+            "cpuFallback"
+          ],
+          "properties": {
+            "residency": {
+              "type": "string",
+              "enum": [
+                "gpu-only"
+              ]
+            },
+            "cpuFallback": {
+              "type": "string",
+              "enum": [
+                "forbidden"
+              ]
+            }
+          }
+        },
+        "caps": {
+          "$ref": "#/$defs/graphCaps"
+        },
+        "timing": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": [
+            "clockPolicy",
+            "outputClockOwner",
+            "stageCount"
+          ],
+          "properties": {
+            "clockPolicy": {
+              "$ref": "#/$defs/clockPolicy"
+            },
+            "outputClockOwner": {
+              "type": "string"
+            },
+            "stageCount": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "stages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dStage"
+          }
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dLink"
+          }
+        },
+        "linkPlan": {
+          "$ref": "#/$defs/dLinkPlan"
+        }
+      }
+    },
+    "dStage": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "id",
+        "kind",
+        "engine",
+        "input",
+        "output",
+        "timing"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "engine": {
+          "type": "string"
+        },
+        "op": {
+          "type": "string"
+        },
+        "device": {
+          "type": "string",
+          "enum": [
+            "gpu"
+          ]
+        },
+        "input": {
+          "$ref": "#/$defs/frameContract"
+        },
+        "output": {
+          "$ref": "#/$defs/frameContract"
+        },
+        "model": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "temporal": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "timing": {
+          "$ref": "#/$defs/dTiming"
+        },
+        "techniques": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "clockPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "videoClockMode",
+        "audioPacingMode",
+        "maxAudioLeadMs",
+        "maxAvDeltaMs"
+      ],
+      "default": {
+        "kind": "live",
+        "videoClockMode": "source-pts",
+        "audioPacingMode": "video-gated",
+        "maxAudioLeadMs": 750,
+        "maxAvDeltaMs": 250
+      },
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "live",
+            "vod",
+            "diagnostic"
+          ],
+          "default": "live"
+        },
+        "videoClockMode": {
+          "type": "string",
+          "enum": [
+            "source-pts",
+            "live-receiver-monotonic",
+            "sasta-pts-gap-squash"
+          ],
+          "default": "source-pts"
+        },
+        "audioPacingMode": {
+          "type": "string",
+          "enum": [
+            "source-pts",
+            "video-gated"
+          ],
+          "default": "video-gated"
+        },
+        "maxAudioLeadMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2000,
+          "default": 750
+        },
+        "maxAvDeltaMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5000,
+          "default": 250
+        }
+      }
+    },
+    "encoderPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "codec",
+        "profile",
+        "pixelFormat",
+        "audioCodec",
+        "width",
+        "height",
+        "fps",
+        "bitrateBps",
+        "maxBitrateBps",
+        "outputQueueMs"
+      ],
+      "properties": {
+        "codec": {
+          "type": "string",
+          "enum": [
+            "hevc"
+          ]
+        },
+        "profile": {
+          "type": "string"
+        },
+        "pixelFormat": {
+          "type": "string"
+        },
+        "audioCodec": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 60
+        },
+        "bitrateBps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxBitrateBps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "outputQueueMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        }
+      }
+    },
+    "graphCaps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input",
+        "output",
+        "residency",
+        "hostCopies"
+      ],
+      "properties": {
+        "input": {
+          "$ref": "#/$defs/frameCaps"
+        },
+        "output": {
+          "$ref": "#/$defs/frameCaps"
+        },
+        "residency": {
+          "type": "string",
+          "enum": [
+            "gpu-only"
+          ]
+        },
+        "hostCopies": {
+          "type": "string",
+          "enum": [
+            "encoded-packets-only"
+          ]
+        }
+      }
+    },
+    "frameCaps": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "format",
+        "res",
+        "width",
+        "height",
+        "fps",
+        "frames",
+        "device"
+      ],
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "res": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 60
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "device": {
+          "type": "string",
+          "enum": [
+            "gpu"
+          ]
+        }
+      }
+    },
+    "dTiming": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "inputFps",
+        "inferFps",
+        "outputFps",
+        "cadenceOwner",
+        "ptsPolicy",
+        "frameHoldPolicy"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "pass-cadence",
+            "gate-inference",
+            "cadence-adapter",
+            "output-clock-owner"
+          ]
+        },
+        "clock": {
+          "type": "string"
+        },
+        "pts": {
+          "type": "string",
+          "enum": [
+            "preserve-source",
+            "hold-last-clean",
+            "interpolated-output",
+            "stage-output"
+          ]
+        },
+        "fps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 60
+        },
+        "inputFps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 60
+        },
+        "inferFps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 60
+        },
+        "outputFps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 60
+        },
+        "cadenceOwner": {
+          "type": "string",
+          "enum": [
+            "pass-cadence",
+            "gate-inference",
+            "cadence-adapter",
+            "output-clock-owner"
+          ]
+        },
+        "ptsPolicy": {
+          "type": "string",
+          "enum": [
+            "preserve-source",
+            "hold-last-clean",
+            "interpolated-output",
+            "stage-output"
+          ]
+        },
+        "frameHoldPolicy": {
+          "type": "string",
+          "enum": [
+            "none",
+            "hold-last",
+            "synthesize",
+            "program-clock"
+          ]
+        }
+      }
+    },
+    "frameContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "res",
+        "width",
+        "height",
+        "fps",
+        "frames"
+      ],
+      "properties": {
+        "format": {
+          "type": "string"
+        },
+        "res": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 60
+        },
+        "frames": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "dLink": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "from",
+        "to",
+        "caps",
+        "ok"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "from": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "to": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "pads": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "caps": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "type": "array"
+        },
+        "errors": {
+          "type": "array"
+        }
+      }
+    },
+    "dLinkPlan": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "ok",
+        "links",
+        "errors",
+        "warnings"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "linkCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dLink"
+          }
+        },
+        "errors": {
+          "type": "array"
+        },
+        "warnings": {
+          "type": "array"
+        }
+      }
+    }
+  }
+}

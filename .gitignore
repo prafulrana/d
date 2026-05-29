@@ -2,3 +2,21 @@ outputs/
 *.mp4
 node_modules/
 *.log*.swp
+gst_shader_runtime_v1/models/*.engine
+gst_shader_runtime_v1/models/**/*.engine
+gst_shader_runtime_v1/models/**/*.trtpkg
+gst_shader_runtime_v1/models/**/*.so
+gst_shader_runtime_v1/models/**/*.so.*
+
+# Vendored NVIDIA SDK binaries (CUDA/TensorRT/VideoFX/AudioFX) + built engines —
+# redistributables/build artifacts, not source. Track source only.
+gst_shader_runtime_v1/**/*.so
+gst_shader_runtime_v1/**/*.so.*
+gst_shader_runtime_v1/**/*.engine
+gst_shader_runtime_v1/**/*.trtpkg
+gst_shader_runtime_v1/**/*.bin
+gst_shader_runtime_v1/**/*.onnx
+gst_shader_runtime_v1/**/*.pb
+gst_shader_runtime_v1/**/*.dll
+gst_shader_runtime_v1/**/*.lib
+d_native_processor
