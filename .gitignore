@@ -20,3 +20,5 @@ gst_shader_runtime_v1/**/*.pb
 gst_shader_runtime_v1/**/*.dll
 gst_shader_runtime_v1/**/*.lib
 d_native_processor
+*.o
+*.a
